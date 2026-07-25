@@ -182,7 +182,14 @@ body {
   margin-top: 1.5rem;
 }
 
+.header-text {
+  padding: 0%;
+  margin: 0;
+  height: auto;
+}
+
 .saved-list {
+  display:grid;
   margin: 0;
   padding: 1rem;
   background: var(--white);
@@ -194,7 +201,16 @@ body {
   color: var(--ink);
   white-space: pre-wrap;
   word-break: break-word;
-  min-height: 3rem;
+  min-height: rem;
+  height: auto;
+  width: 100%;
+  resize: vertical;
+  outline: none;
+}
+.saved-list:focus { border-color: var(--accent-ink); }
+
+.saved-panel-btns {
+  display: flex;
 }
 
 /* Buttons */

@@ -11,12 +11,12 @@ export function initSearch() {
   const saveBtn = document.getElementById("saveBtn");
   const headerBtn = document.getElementById("headerBtn");
   const savedList = document.getElementById("saved-list");
+  const headerText = document.getElementById("header-text");
 
   let debounceTimer;
   let highlightedIndex = -1;
   let count = "";
-  let savedWords = [];
-  let header = "";
+  let header;
 
   function updateHighlight(items) {
     items.forEach((item, index) => {
@@ -28,15 +28,11 @@ export function initSearch() {
     }
   }
 
-  function renderSavedWords() {
-    savedList.textContent = `${header}\n${savedWords.length ? savedWords.join("\n") : ""}`;
-  }
-
   function openDropdown() {
     resultsList.classList.add("is-open");
     searchInput.setAttribute("aria-expanded", "true");
   }
-
+  
   function closeDropdown() {
     resultsList.classList.remove("is-open");
     searchInput.setAttribute("aria-expanded", "false");
@@ -85,9 +81,8 @@ export function initSearch() {
   }
 
   function selectWord(word) {
-    savedWords.push(word);
-    renderSavedWords();
-    searchInput.focus();
+    const curr = savedList.value;
+    savedList.value = curr ? `${curr}\n${word}` : word;
   }
 
   searchInput.addEventListener("input", () => {
@@ -141,18 +136,19 @@ export function initSearch() {
   headerBtn?.addEventListener("click", () => {
     header = headerInput.value.trim();
     if (header === "") return;
-    renderSavedWords();
+    headerText.textContent = header;
     headerInput.value = "";
   });
 
   clearBtn?.addEventListener("click", () => {
-    savedWords = [];
-    renderSavedWords();
-    searchInput.focus();
+    const text = (header ? (header + '\n') : "") + savedList.value;
+    navigator.clipboard.writeText(text);
+    savedList.value = "";
+    searchInput.focus();  
   });
 
   saveBtn?.addEventListener("click", () => {
-    const text = savedList.textContent;
+    const text = (header ? (header + '\n') : "") + savedList.value;
     if (text === "") {
       setStatus(document.getElementById("save-status"), "Nothing to save!", "err");
       return;
@@ -168,6 +164,7 @@ export function initSearch() {
   });
 
   copyBtn?.addEventListener("click", () => {
-    navigator.clipboard.writeText(savedList.textContent);
+    const text = (header ? (header + '\n') : "") + savedList.value;
+    navigator.clipboard.writeText(text);
   });
 }

@@ -37,11 +37,15 @@
       </div>
   
       <div class="saved-panel">
-        <label class="field-label">Saved words</label>
-        <pre class="saved-list" id="saved-list"></pre>
+        <div class="saved-list">
+          <label class="field-label">Saved words</label>
+          <p class="header-text" id="header-text"></p>
+          <textarea class="saved-list" id="saved-list" rows="8" spellcheck="false"></textarea>
+          
+        </div>
+        <div class="saved-panel-btns">
         <button id="clearBtn" class="btn-secondary" type="button">Clear</button>
         <button id="copyBtn" class="btn-secondary" type="button">Copy to clipboard</button>
-        <div>
           <button id="saveBtn" class="btn-secondary" type="button">Save as file</button>
           <p class="status-msg" id="save-status" role="status"></p>
         </div>
