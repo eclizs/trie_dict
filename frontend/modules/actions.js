@@ -13,7 +13,7 @@ export function initActions() {
 
   uploadBtn?.addEventListener("click", async () => {
     if (!fileInput?.files?.length) {
-      alert("Select a file first");
+      setStatus(addStatus, "Select a file first.", "err");
       return;
     }
 

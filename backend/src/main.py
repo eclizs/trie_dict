@@ -47,6 +47,8 @@ async def search_word(request: Request, prefix: Annotated[ str | None, Query(max
         response.append(entry.decode('utf-8'))
         
     freeWordList(word_list)
+    if response == []:
+        raise HTTPException(status_code=404, detail="No matches found")
     return {"words": response}
 
 @app.post("/insert")
