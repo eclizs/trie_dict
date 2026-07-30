@@ -21,18 +21,28 @@
     <section class="panel is-active" id="panel-search" role="tabpanel">
       <label class="field-label" for="search-input">Cari Kata</label>
       <div class="search-box">
-        <input
-          id="search-input"
-          class="text-input"
-          type="text"
-          placeholder="type to search…"
-          autocomplete="off"
-          maxlength="100"
-          role="combobox"
-          aria-expanded="false"
-          aria-autocomplete="list"
-          aria-controls="results-list"
-        >
+        <div class="search-controls">
+          <input 
+            id="number-input"
+            class="text-input"
+            type="number"
+            autocomplete="off"
+            maxlength="4"
+            inputmode="numeric"
+            >
+          <input
+            id="search-input"
+            class="text-input"
+            type="text"
+            placeholder="type to search…"
+            autocomplete="off"
+            maxlength="100"
+            role="combobox"
+            aria-expanded="false"
+            aria-autocomplete="list"
+            aria-controls="results-list"
+          >
+        </div>
         <ul class="entry-list" id="results-list" role="listbox" aria-live="polite"></ul>
       </div>
   

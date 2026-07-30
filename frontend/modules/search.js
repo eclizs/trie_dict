@@ -3,6 +3,7 @@ import { setStatus } from "./utils.js";
 
 export function initSearch() {
   const searchInput = document.getElementById("search-input");
+  const numberInput = document.getElementById("number-input");
   const headerInput = document.getElementById("header-input");
   const resultsList = document.getElementById("results-list");
   const searchBox = document.querySelector(".search-box");
@@ -81,33 +82,31 @@ export function initSearch() {
   }
 
   function selectWord(word) {
+    const count = numberInput.value ? `${numberInput.value} ` : "";
     const curr = savedList.value;
-    savedList.value = curr ? `${curr}\n${word}` : word;
+    savedList.value = curr ? `${curr}\n${count}${word}` : `${count}${word}`;
   }
 
   searchInput.addEventListener("input", () => {
     clearTimeout(debounceTimer);
 
     const raw = searchInput.value.trim();
-    const spaceIdx = raw.indexOf(" ");
 
     let prefix = raw;
-    count = "";
-
-    if (spaceIdx !== -1) {
-      const firstWord = raw.slice(0, spaceIdx);
-      if (/^@?\d+$/.test(firstWord)) {
-        count = `${firstWord} `;
-        prefix = raw.slice(spaceIdx + 1);
-      }
-    }
 
     debounceTimer = setTimeout(() => runSearch(prefix), 200);
   });
 
   searchInput.addEventListener("keydown", (event) => {
     const items = resultsList.querySelectorAll(".entry-item:not(.is-empty)");
-    if (!resultsList.classList.contains("is-open") || items.length === 0) return;
+    if (!resultsList.classList.contains("is-open") || items.length === 0)
+    {
+      if(searchInput.value === "") return;
+      else if(event.key === "Enter") {
+        selectWord(searchInput.value);
+        numberInput.focus();
+      }
+    }
 
     if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
       event.preventDefault();
@@ -122,8 +121,18 @@ export function initSearch() {
         event.preventDefault();
         selectWord(count + items[highlightedIndex].dataset.word);
       }
+      numberInput.focus();
     } else if (event.key === "Escape") {
       closeDropdown();
+      numberInput.focus();
+    }
+  });
+  
+  numberInput.addEventListener("keydown", (event) => {
+    if(event.key === "Enter" || event.key === " ")
+    {
+      event.preventDefault();
+      searchInput.focus();
     }
   });
 
@@ -141,8 +150,7 @@ export function initSearch() {
   });
 
   clearBtn?.addEventListener("click", () => {
-    const text = (header ? (header + '\n') : "") + savedList.value;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(savedList.value);
     savedList.value = "";
     searchInput.focus();  
   });
