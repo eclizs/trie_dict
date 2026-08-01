@@ -183,8 +183,13 @@ button {
 }
 
 /* Search input and its independent quantity control */
-.search-box {
+.search-box, .delete-box {
   position: relative;
+}
+
+.result-list-delete {
+  width: 100%;
+  position: inherit;
 }
 
 .search-controls {

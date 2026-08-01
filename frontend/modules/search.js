@@ -1,11 +1,10 @@
-import { escapeHtml } from "./utils.js";
-import { setStatus } from "./utils.js";
+import * as utils from "./utils.js";
 
 export function initSearch() {
   const searchInput = document.getElementById("search-input");
   const numberInput = document.getElementById("number-input");
   const headerInput = document.getElementById("header-input");
-  const resultsList = document.getElementById("results-list");
+  const resultsList = document.getElementById("results-list-search");
   const searchBox = document.querySelector(".search-box");
   const clearBtn = document.getElementById("clearBtn");
   const copyBtn = document.getElementById("copyBtn");
@@ -16,76 +15,7 @@ export function initSearch() {
 
   let debounceTimer;
   let highlightedIndex = -1;
-  let count = "";
   let header;
-
-  function updateHighlight(items) {
-    items.forEach((item, index) => {
-      item.classList.toggle("is-highlighted", index === highlightedIndex);
-    });
-
-    if (items[highlightedIndex]) {
-      items[highlightedIndex].scrollIntoView({ block: "nearest" });
-    }
-  }
-
-  function openDropdown() {
-    resultsList.classList.add("is-open");
-    searchInput.setAttribute("aria-expanded", "true");
-  }
-  
-  function closeDropdown() {
-    resultsList.classList.remove("is-open");
-    searchInput.setAttribute("aria-expanded", "false");
-    highlightedIndex = -1;
-  }
-
-  function renderMessage(message) {
-    highlightedIndex = -1;
-    resultsList.innerHTML = `<li class="entry-item is-empty">${escapeHtml(message)}</li>`;
-    openDropdown();
-  }
-
-  function renderResults(words) {
-    if (words.length === 0) {
-      renderMessage("No matches found.");
-      return;
-    }
-
-    highlightedIndex = -1;
-    resultsList.innerHTML = words
-      .map((word) => `
-        <li class="entry-item" data-word="${escapeHtml(word)}" role="option">
-          <div class="entry-word">${escapeHtml(word)}</div>
-        </li>
-      `)
-      .join("");
-
-    resultsList.querySelectorAll(".entry-item").forEach((item) => {
-      item.addEventListener("click", () => selectWord(count + item.dataset.word));
-    });
-
-    openDropdown();
-  }
-
-  async function runSearch(prefix) {
-    const searchTerm = prefix || "";
-
-    try {
-      const res = await fetch(`/search?prefix=${encodeURIComponent(searchTerm)}`);
-      if (!res.ok) throw new Error(`Search failed (${res.status})`);
-      const data = await res.json();
-      renderResults(data.words || []);
-    } catch (error) {
-      renderMessage("No matches found");
-    }
-  }
-
-  function selectWord(word) {
-    const count = numberInput.value ? `${numberInput.value} ` : "";
-    const curr = savedList.value;
-    savedList.value = curr ? `${curr}\n${count}${word}` : `${count}${word}`;
-  }
 
   searchInput.addEventListener("input", () => {
     clearTimeout(debounceTimer);
@@ -94,7 +24,13 @@ export function initSearch() {
 
     let prefix = raw;
 
-    debounceTimer = setTimeout(() => runSearch(prefix), 200);
+    debounceTimer = setTimeout(
+      () =>
+        utils.runSearch(prefix, resultsList, searchInput, (word) =>
+          utils.selectWord(word, numberInput, savedList)
+        ),
+      200
+    );
   });
 
   searchInput.addEventListener("keydown", (event) => {
@@ -103,7 +39,7 @@ export function initSearch() {
     {
       if(searchInput.value === "") return;
       else if(event.key === "Enter") {
-        selectWord(searchInput.value);
+        utils.selectWord(searchInput.value, numberInput, savedList);
         numberInput.focus();
       }
     }
@@ -111,19 +47,19 @@ export function initSearch() {
     if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
       event.preventDefault();
       highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
-      updateHighlight(items);
+      utils.updateHighlight(items, highlightedIndex);
     } else if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
       event.preventDefault();
       highlightedIndex = Math.max(highlightedIndex - 1, 0);
-      updateHighlight(items);
+      utils.updateHighlight(items, highlightedIndex);
     } else if (event.key === "Enter") {
       if (highlightedIndex >= 0 && items[highlightedIndex]) {
         event.preventDefault();
-        selectWord(count + items[highlightedIndex].dataset.word);
+        utils.selectWord(count + items[highlightedIndex].dataset.word, numberInput, savedList);
       }
       numberInput.focus();
     } else if (event.key === "Escape") {
-      closeDropdown();
+      utils.closeDropdown(searchInput, resultsList);
       numberInput.focus();
     }
   });
@@ -138,7 +74,7 @@ export function initSearch() {
 
   document.addEventListener("click", (event) => {
     if (!searchBox.contains(event.target)) {
-      closeDropdown();
+      utils.closeDropdown(searchInput, resultsList);
     }
   });
 

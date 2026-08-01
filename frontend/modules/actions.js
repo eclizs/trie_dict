@@ -1,4 +1,4 @@
-import { setStatus } from "./utils.js";
+import * as utils from "./utils.js";
 
 export function initActions() {
   const addInput = document.getElementById("add-input");
@@ -10,13 +10,17 @@ export function initActions() {
   const deleteBtn = document.getElementById("delete-btn");
   const deleteStatus = document.getElementById("delete-status");
   const uploadStatus = document.getElementById("upload-status");
+  const resultsList = document.getElementById("results-list-delete");
+
+  let debounceTimer;
+  let highlightedIndex = -1;
 
   uploadBtn?.addEventListener("click", async () => {
     if (!fileInput?.files?.length) {
-      setStatus(addStatus, "Select a file first.", "err");
+      utils.setStatus(addStatus, "Select a file first.", "err");
       return;
     }
-
+    
     const formData = new FormData();
     formData.append("file", fileInput.files[0]);
 
@@ -31,7 +35,7 @@ export function initActions() {
       : [];
 
     const statusMsg = `${fails.length} insertion(s) failed:\n${fails.length ? fails.join("\n") : ""}`;
-    setStatus(uploadStatus, statusMsg, "err");
+    utils.setStatus(uploadStatus, statusMsg, "err");
 
     if (!res.ok) {
       alert("Upload failed");
@@ -41,7 +45,7 @@ export function initActions() {
   addBtn?.addEventListener("click", async () => {
     const word = addInput?.value.trim();
     if (!word) {
-      setStatus(addStatus, "Type a word first.", "err");
+      utils.setStatus(addStatus, "Type a word first.", "err");
       return;
     }
 
@@ -52,20 +56,62 @@ export function initActions() {
       const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
-        setStatus(addStatus, data.message || `Added "${word}".`, "ok");
+        utils.setStatus(addStatus, data.message || `Added "${word}".`, "ok");
         addInput.value = "";
       } else {
-        setStatus(addStatus, data.detail || `Could not add "${word}".`, "err");
+        utils.setStatus(addStatus, data.detail || `Could not add "${word}".`, "err");
       }
     } catch (error) {
-      setStatus(addStatus, "Error: Unprocessable content", "err");
+      utils.setStatus(addStatus, "Error: Unprocessable content", "err");
+    }
+  });
+
+  deleteInput?.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+
+    const raw = deleteInput.value.trim();
+
+    let prefix = raw;
+
+    debounceTimer = setTimeout(
+      () =>
+        utils.runSearch(prefix, resultsList, deleteInput, (word) => {
+          deleteInput.value = word;
+        }),
+      200
+    );
+  });
+
+  deleteInput?.addEventListener("keydown", (event) => {
+    const items = resultsList.querySelectorAll(".entry-item:not(.is-empty)");
+    if (!resultsList.classList.contains("is-open") || items.length === 0)
+    {
+      if(deleteInput.value === "") return;
+    }
+
+    if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
+      event.preventDefault();
+      highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+      utils.updateHighlight(items, highlightedIndex);
+    } else if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
+      event.preventDefault();
+      highlightedIndex = Math.max(highlightedIndex - 1, 0);
+      utils.updateHighlight(items, highlightedIndex);
+    } else if (event.key === "Enter") {
+      if (highlightedIndex >= 0 && items[highlightedIndex]) {
+        event.preventDefault();
+        deleteInput.value = items[highlightedIndex].dataset.word;
+        utils.closeDropdown(deleteInput, resultsList);
+      }
+    } else if (event.key === "Escape") {
+      utils.closeDropdown(deleteInput, resultsList);
     }
   });
 
   deleteBtn?.addEventListener("click", async () => {
     const word = deleteInput?.value.trim();
     if (!word) {
-      setStatus(deleteStatus, "Type a word first.", "err");
+      utils.setStatus(deleteStatus, "Type a word first.", "err");
       return;
     }
 
@@ -76,13 +122,13 @@ export function initActions() {
       const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
-        setStatus(deleteStatus, data.message || `Deleted "${word}".`, "ok");
+        utils.setStatus(deleteStatus, data.message || `Deleted "${word}".`, "ok");
         deleteInput.value = "";
       } else {
-        setStatus(deleteStatus, data.detail || `Could not delete "${word}".`, "err");
+        utils.setStatus(deleteStatus, data.detail || `Could not delete "${word}".`, "err");
       }
     } catch (error) {
-      setStatus(deleteStatus, "Error: Unprocessable content", "err");
+      utils.setStatus(deleteStatus, "Error: Unprocessable content", "err");
     }
   });
 }

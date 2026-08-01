@@ -43,7 +43,7 @@
             aria-controls="results-list"
           >
         </div>
-        <ul class="entry-list" id="results-list" role="listbox" aria-live="polite"></ul>
+        <ul class="entry-list" id="results-list-search" role="listbox" aria-live="polite"></ul>
       </div>
   
       <div class="saved-panel">
@@ -99,14 +99,17 @@
     <!-- DELETE PANEL -->
     <section class="panel" id="panel-delete" role="tabpanel">
       <label class="field-label" for="delete-input">Hapus kata</label>
-      <input
-        id="delete-input"
-        class="text-input"
-        type="text"
-        placeholder="Enter word here..."
-        autocomplete="off"
-        maxlength="100"
-      >
+      <div class="delete-box">
+        <input
+          id="delete-input"
+          class="text-input"
+          type="text"
+          placeholder="Enter word here..."
+          autocomplete="off"
+          maxlength="100"
+        >
+        <ul class="entry-list" id="results-list-delete" role="listbox" aria-live="polite"></ul>
+      </div>
       <button class="action-btn danger" id="delete-btn">Hapus</button>
       <p class="status-msg" id="delete-status" role="status"></p>
     </section>
