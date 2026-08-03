@@ -8,7 +8,6 @@ from pwdlib import PasswordHash
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
-from .routers.users import get_user_by_email
 from .database import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/token")

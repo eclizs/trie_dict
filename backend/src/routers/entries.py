@@ -1,16 +1,11 @@
-
-
-from fastapi import Depends, APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing_extensions import Annotated
 
-from ..database import get_db
-from ..models import Entry, User
+from ..models import Entry
 
-router = APIRouter()
-
-@router.get("/dict", status_code=status.HTTP_200_OK)
-async def get_dict(session: Annotated[AsyncSession, Depends(get_db)], user: User):
-    result = await session.execute(select(Entry.entry).where(Entry.user_id == user.id))
-    return result.scalars().all()
+async def get_entries_for_user(session: AsyncSession, user_id: int) -> list[str]:
+    """Return the persisted dictionary entries owned by one user."""
+    result = await session.execute(
+        select(Entry.entry).where(Entry.user_id == user_id)
+    )
+    return list(result.scalars().all())

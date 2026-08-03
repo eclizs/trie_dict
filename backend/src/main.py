@@ -10,14 +10,12 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from contextlib import asynccontextmanager
 
-from backend.src.routers import users
-
 from .init import init_trie
 from .auth import create_access_token, oauth2_scheme, verify_access_token
 from .models import User, Entry
 from .config import get_settings
 from .database import get_db, engine, Base
-from .routers import entries, users
+from .routers import users
 
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
@@ -50,7 +48,6 @@ app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 app.include_router(users.router, prefix="/users", tags=["users"])
-app.include_router(entries.router, prefix="/entries", tags=["entries"])
 
 @app.get("/")
 async def root():

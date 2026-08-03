@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
@@ -21,7 +21,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def __repr__(self):
         return f"{self.id}: {self.email}"
