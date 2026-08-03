@@ -55,6 +55,8 @@ def init_function(name, argtypes: list, restype):
     func.restype = restype
     return func
 
+def create_trie_root():
+    return ctypes.POINTER(TrieNode)()
 
 def init_trie():
     functions = parse_header(os.path.join(path, "../include/trie.h"))
@@ -70,6 +72,4 @@ def init_trie():
     for func_name, argtypes, restype in functions:
         func_dict[func_name] = init_function(func_name, argtypes, restype)
 
-    root = ctypes.POINTER(TrieNode)()
-
-    return root, func_dict
+    return create_trie_root(), func_dict

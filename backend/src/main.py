@@ -3,36 +3,64 @@ import re
 import io
 
 from typing import Annotated
-from fastapi import FastAPI, Query, Request, HTTPException, UploadFile, File
+from fastapi import Depends, FastAPI, Query, Request, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from .init import init_trie
+from fastapi.security import OAuth2PasswordRequestForm
+
 from contextlib import asynccontextmanager
+
+from backend.src.routers import users
+
+from .init import init_trie
+from .auth import create_access_token, oauth2_scheme, verify_access_token
+from .models import User, Entry
+from .config import get_settings
+from .database import get_db, engine, Base
+from .routers import entries, users
+
+from sqlalchemy import select, delete
+from sqlalchemy.orm import Session
 
 from pandas import read_csv
 
 re.ASCII
 
+# DatabaseSession = Annotated[db.AsyncSession, Depends(db.get_db)]
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     root, functions = init_trie()
     app.state.root = root
     app.state.functions = functions
 
+    # DatabaseSession = db.get_db()
+
+    # result = DatabaseSession.execute
+
     yield
+
+    await engine.dispose()
 
 app = FastAPI(lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
+app.include_router(users.router, prefix="/users", tags=["users"])
+app.include_router(entries.router, prefix="/entries", tags=["entries"])
+
 @app.get("/")
 async def root():
     return FileResponse("frontend/index.html")
 
-@app.get("/search",)
+@app.get("/search")
 async def search_word(request: Request, prefix: Annotated[ str | None, Query(max_length=100, pattern=r'^[-a-zA-Z0-9 /@"()+.,]*$') ] = None,):
     findWords = request.app.state.functions["findWords"]
     freeWordList = request.app.state.functions["freeWordList"]
+
     root = request.app.state.root
 
     if not prefix:
@@ -92,8 +120,6 @@ async def insert_excel(request: Request, file: UploadFile = File(...)):
 
     return results
 
-    
-
 @app.delete("/delete")
 async def delete_word(word: Annotated[ str, Query(max_length=100, pattern=r'^[-a-zA-Z0-9 /@"()+.,]*$') ], request: Request):
     deleteWord = request.app.state.functions["deleteWord"]
@@ -107,4 +133,3 @@ async def delete_word(word: Annotated[ str, Query(max_length=100, pattern=r'^[-a
         raise HTTPException(status_code=404, detail=f"'{word}' not found")
     else:
         return {"message": f"successfully deleted '{word}'"}
-
