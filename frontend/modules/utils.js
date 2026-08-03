@@ -51,7 +51,7 @@ export function renderResults(words, list, input, onSelect) {
     .join("");
 
   list.querySelectorAll(".entry-item").forEach((item) => {
-    item.addEventListener("click", () => onSelect(item.dataset.word));
+    item.addEventListener("click", () => {onSelect(item.dataset.word); input.focus()});
   });
 
   openDropdown(input, list);

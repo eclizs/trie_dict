@@ -7,6 +7,10 @@ trie
 test_trie
 obj/
 
+.env
+
+.db
+
 # Python artifacts
 __pycache__/
 *.py[cod]
