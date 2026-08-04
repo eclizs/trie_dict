@@ -24,7 +24,7 @@ export function initActions() {
     const formData = new FormData();
     formData.append("file", fileInput.files[0]);
 
-    const res = await fetch("/insert_excel", {
+    const res = await fetch("/admin/insert_excel", {
       method: "POST",
       body: formData,
     });

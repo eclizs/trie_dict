@@ -55,7 +55,7 @@ export function initSearch() {
     } else if (event.key === "Enter") {
       if (highlightedIndex >= 0 && items[highlightedIndex]) {
         event.preventDefault();
-        utils.selectWord(count + items[highlightedIndex].dataset.word, numberInput, savedList);
+        utils.selectWord(items[highlightedIndex].dataset.word, numberInput, savedList);
       }
       numberInput.focus();
     } else if (event.key === "Escape") {

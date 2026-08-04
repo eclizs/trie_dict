@@ -70,8 +70,8 @@ export async function runSearch(prefix, list, input, onSelect) {
   }
 }
 
-export function selectWord(word, numberInput, savedList) {
-  const count = numberInput.value ? `${numberInput.value} ` : "";
+export function selectWord(word, input, savedList) {
+  const count = input.value ? `${input.value} ` : "";
   const curr = savedList.value;
   savedList.value = curr ? `${curr}\n${count}${word}` : `${count}${word}`;
 }
