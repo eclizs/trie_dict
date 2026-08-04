@@ -1,6 +1,6 @@
 import ctypes
 import os
-from parser import *
+from .parser import *
 
 path = os.path.abspath(os.path.dirname(__file__))
 
@@ -39,16 +39,24 @@ def init_pointer_type(type, pointer_level: int):
         return type
     else:
         return ctypes.POINTER(init_pointer_type(type, pointer_level - 1))
-    
+
 
 def init_type(type: str):
+    if type in ctypes_map:
+        return ctypes_map[type]
+
     pointer_level = type.count("*")
     base_type = type.replace("*", "").strip()
+
     if base_type in ctypes_map:
-        return ctypes_map[base_type]
+        base = ctypes_map[base_type]
+    elif base_type in globals():
+        base = globals()[base_type]
     else:
-        return init_pointer_type(globals()[base_type], pointer_level)
-        
+        raise ValueError(f"Unknown C type: {type}")
+
+    return init_pointer_type(base, pointer_level)
+
 def init_function(name, argtypes: list, restype):
     func = getattr(libtrie, name)
     func.argtypes = argtypes
@@ -66,7 +74,6 @@ def init_trie():
         if func_param is None:
             func_param = []
         functions[i] = (func_name, [init_type(param) for param in func_param], init_type(return_val))
-        print(functions[i])
         i += 1
 
     func_dict = {}

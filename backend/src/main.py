@@ -1,25 +1,22 @@
 import ctypes
 import re
 import io
-import asyncio
 
 from typing import Annotated
-from fastapi import status, Depends, FastAPI, Query, Request, HTTPException, UploadFile, File
+from fastapi import status, FastAPI, Query, Request, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
-from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
 
 from .models import Entry, User
 
-from .schema import EntryCreate
-
-from .init import create_trie_root, init_trie
-from .database import engine, Base, get_db
-from .routers.users import Identity, get_identity, router, DatabaseSession
+from .database import engine, Base
+from .dependencies import DatabaseSession, Identity, get_user_id
+from .routers.users import router
+from .trie_state import discard_root, destroy_trie_state, initialize_trie_state, locked_root
 from .config import settings
 
 from pandas import read_csv
@@ -31,105 +28,15 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    root, functions = init_trie()
-    app.state.roots = {}
-    app.state.root_locks = {}
-    app.state.functions = functions
+    initialize_trie_state(app)
 
     yield
 
-    destroyTrieNode = app.state.functions["destroyTrieNode"]
-    for root in app.state.roots.values():
-        destroyTrieNode(ctypes.byref(root))
-    app.state.roots.clear()
-    app.state.root_locks.clear()
+    destroy_trie_state(app)
 
     await engine.dispose()
 
 app = FastAPI(lifespan=lifespan)
-
-def get_or_create_root(app: FastAPI, identity: str):
-    root = app.state.roots.get(identity)
-
-    if root is not None:
-        return root, False
-
-    root = create_trie_root()
-    app.state.roots[identity] = root
-
-    return root, True
-
-def discard_root(app: FastAPI, identity: str):
-    root = app.state.roots.pop(identity, None)
-    if root is not None:
-        destroyTrieNode = app.state.functions["destroyTrieNode"]
-        destroyTrieNode(ctypes.byref(root))
-
-def get_root_lock(app: FastAPI, identity: str) -> asyncio.Lock:
-    lock = app.state.root_locks.get(identity)
-
-    if lock is None:
-        lock = asyncio.Lock()
-        app.state.root_locks[identity] = lock
-
-    return lock
-
-def get_user_id(identity: Identity):
-    if identity.startswith("user:"):
-        return int(identity.removeprefix("user:"))
-    elif identity.startswith("guest:"):
-        return -1
-    else:
-        raise ValueError("Invalid parameters")
-
-async def populate_trie(
-    request: Request,
-    identity: Identity,
-    session: DatabaseSession,
-    root: ctypes._Pointer
-):
-    insertTrieNode = request.app.state.functions["insertTrieNode"]
-
-    user_id = get_user_id(identity)
-    results =  await session.execute(select(Entry).where(Entry.user_id == user_id))
-
-    entries = results.scalars().all()
-
-    for entry in entries:
-        c_word = ctypes.create_string_buffer(entry.entry.encode("utf-8"))
-        result = insertTrieNode(ctypes.byref(root), c_word)
-
-        if result != status.HTTP_201_CREATED:
-            raise RuntimeError(
-                f"Could not load entry {entry.id} into the trie (status {result})"
-            )
-
-async def get_loaded_root(
-    request: Request,
-    identity: Identity,
-    session: DatabaseSession,
-):
-    root, created = get_or_create_root(request.app, identity)
-
-    if created and identity.startswith("user:"):
-        try:
-            await populate_trie(request, identity, session, root)
-        except Exception:
-            discard_root(request.app, identity)
-            raise
-
-    return root
-
-@asynccontextmanager
-async def locked_root(
-    request: Request,
-    identity: Identity,
-    session: DatabaseSession,
-):
-    lock = get_root_lock(request.app, identity)
-
-    async with lock:
-        yield await get_loaded_root(request, identity, session)
 
 app.add_middleware(
     SessionMiddleware,
