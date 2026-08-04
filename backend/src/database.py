@@ -19,8 +19,6 @@ async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
 
-
-
 # async def run():
 #     await init_db()
 
