@@ -37,14 +37,16 @@ export function initSearch() {
     const items = resultsList.querySelectorAll(".entry-item:not(.is-empty)");
     if (!resultsList.classList.contains("is-open") || items.length === 0)
     {
-      if(searchInput.value === "") return;
-      else if(event.key === "Enter") {
+      if(event.key === "Enter" && searchInput.value !== "") {
         utils.selectWord(searchInput.value, numberInput, savedList);
         numberInput.focus();
       }
     }
 
-    if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
+    if(searchInput.value === "" && event.key === "Backspace") {
+      event.preventDefault()
+      numberInput.focus()
+    } else if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
       event.preventDefault();
       highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
       utils.updateHighlight(items, highlightedIndex);
