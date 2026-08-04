@@ -244,7 +244,7 @@ async def insert_word(
             )
     
 
-@app.post("/admin/insert_excel", include_in_schema=False)
+@app.post("/insert_excel", include_in_schema=False)
 async def insert_excel(
     request: Request,
     identity: Identity,
