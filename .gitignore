@@ -9,7 +9,7 @@ obj/
 
 .env
 
-.db
+*.db
 
 # Python artifacts
 __pycache__/
