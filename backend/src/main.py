@@ -6,7 +6,8 @@ from typing import Annotated
 from fastapi import status, Depends, FastAPI, Query, Request, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
@@ -35,6 +36,11 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    destroyTrieNode = app.state.functions["destroyTrieNode"]
+    for root in app.state.roots.values():
+        destroyTrieNode(ctypes.byref(root))
+    app.state.roots.clear()
+
     await engine.dispose()
 
 app = FastAPI(lifespan=lifespan)
@@ -42,11 +48,19 @@ app = FastAPI(lifespan=lifespan)
 def get_or_create_root(app: FastAPI, identity: str):
     root = app.state.roots.get(identity)
 
-    if root is None:
-        root = create_trie_root()
-        app.state.roots[identity] = root
+    if root is not None:
+        return root, False
 
-    return root
+    root = create_trie_root()
+    app.state.roots[identity] = root
+
+    return root, True
+
+def discard_root(app: FastAPI, identity: str):
+    root = app.state.roots.pop(identity, None)
+    if root is not None:
+        destroyTrieNode = app.state.functions["destroyTrieNode"]
+        destroyTrieNode(ctypes.byref(root))
 
 def get_user_id(identity: Identity):
     if identity.startswith("user:"):
@@ -56,22 +70,43 @@ def get_user_id(identity: Identity):
     else:
         raise ValueError("Invalid parameters")
 
-async def populate_trie(request: Request, identity: Identity, session: DatabaseSession):
+async def populate_trie(
+    request: Request,
+    identity: Identity,
+    session: DatabaseSession,
+    root: ctypes._Pointer
+):
     insertTrieNode = request.app.state.functions["insertTrieNode"]
 
-    root = get_or_create_root(request.app, identity)
     user_id = get_user_id(identity)
     results =  await session.execute(select(Entry).where(Entry.user_id == user_id))
 
     entries = results.scalars().all()
 
-    if not entries:
-        return False
-    else:
-        for entry in entries:
-            c_word = entry.entry.encode('utf-8')
-            
-            result = insertTrieNode(ctypes.byref(root), c_word)
+    for entry in entries:
+        c_word = ctypes.create_string_buffer(entry.entry.encode("utf-8"))
+        result = insertTrieNode(ctypes.byref(root), c_word)
+
+        if result != status.HTTP_201_CREATED:
+            raise RuntimeError(
+                f"Could not load entry {entry.id} into the trie (status {result})"
+            )
+
+async def get_loaded_root(
+    request: Request,
+    identity: Identity,
+    session: DatabaseSession,
+):
+    root, created = get_or_create_root(request.app, identity)
+
+    if created and identity.startswith("user:"):
+        try:
+            await populate_trie(request, identity, session, root)
+        except Exception:
+            discard_root(request.app, identity)
+            raise
+
+    return root
 
 app.add_middleware(
     SessionMiddleware,
@@ -101,21 +136,13 @@ async def search_word(
     findWords = request.app.state.functions["findWords"]
     freeWordList = request.app.state.functions["freeWordList"]
 
-    root = get_or_create_root(request.app, identity)
-
-    user_id = get_user_id(identity)
-
-    if user_id != -1:
-        results = await session.execute(select(Entry).where(Entry.user_id == user_id))
-        entries = results.scalars().all()
-
-        for entry in entries:
-            await insert_word(request, identity, session, entry.entry)
+    root = await get_loaded_root(request, identity, session)
 
     if not prefix:
         prefix = ""
 
-    word_list = findWords(root, prefix.encode('utf-8'))
+    c_prefix = ctypes.create_string_buffer(prefix.encode("utf-8"))
+    word_list = findWords(root, c_prefix)
 
     response = []
     
@@ -136,7 +163,9 @@ async def insert_word(
     word: Annotated[ str, Query(max_length=100, pattern=r'^[-a-zA-Z0-9 /@"()+.,]*$') ],
 ):
     insertTrieNode = request.app.state.functions["insertTrieNode"]
-    root = get_or_create_root(request.app, identity)
+    root = await get_loaded_root(request, identity, session)
+
+    c_word = ctypes.create_string_buffer(word.encode("utf-8"))
 
     user_id = get_user_id(identity)
     if user_id != -1:
@@ -147,18 +176,36 @@ async def insert_word(
         session.add(entry)
 
         try:
-            await session.commit()
-            await session.refresh(entry)
-        except:
+            await session.flush()
+        except IntegrityError:
             await session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"'{word}' already exists"
             )
+        except SQLAlchemyError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not save word"
+            )
 
-    c_word = word.encode('utf-8')
+        result = insertTrieNode(ctypes.byref(root), c_word)
 
-    result = insertTrieNode(ctypes.byref(root), c_word)
+        if result != status.HTTP_201_CREATED:
+            await session.rollback()
+        else:
+            try:
+                await session.commit()
+            except SQLAlchemyError:
+                await session.rollback()
+                discard_root(request.app, identity)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not save word"
+                )
+    else:
+        result = insertTrieNode(ctypes.byref(root), c_word)
 
     if result == 400:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"'{word}' is empty")
@@ -166,9 +213,15 @@ async def insert_word(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"'{word}' already exists")
     elif result == 201:
         return {"message": f"successfully inserted '{word}'"}
+    else:
+        discard_root(request.app, identity)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected response from trie"
+        )
     
 
-@app.post("admin/insert_excel", include_in_schema=False)
+@app.post("/admin/insert_excel", include_in_schema=False)
 async def insert_excel(
     request: Request,
     identity: Identity,
@@ -178,7 +231,7 @@ async def insert_excel(
     user_id = get_user_id(identity)
     if user_id == -1:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="Method not allowed"
         )
     
@@ -193,7 +246,7 @@ async def insert_excel(
 
     if not user.is_admin:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="Method not allowed"
         )
     
@@ -229,23 +282,56 @@ async def delete_word(
     ],
 ):
     deleteWord = request.app.state.functions["deleteWord"]
-    root = get_or_create_root(request.app, identity)
+    root = await get_loaded_root(request, identity, session)
+
+    c_word = ctypes.create_string_buffer(word.encode("utf-8"))
 
     user_id = get_user_id(identity)
     if user_id != -1:
-        await session.delete(select(Entry).where(Entry.user_id == user_id and Entry.entry == word))
-        try:
-            await session.commit()
-        except:
-            await session.rollback()
+        result = await session.execute(
+            select(Entry).where(
+                Entry.user_id == user_id,
+                func.lower(Entry.entry) == word.lower(),
+            )
+        )
+        entry = result.scalars().first()
+
+        if entry is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"'{word}' doesn't exists"
+                detail=f"'{word}' not found"
+            )
+        await session.delete(entry)
+        try:
+            await session.flush()
+        except SQLAlchemyError:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not delete word"
             )
 
-    c_word = word.encode('utf-8')
+        result = deleteWord(ctypes.byref(root), c_word)
 
-    result = deleteWord(ctypes.byref(root), c_word)
+        if not result:
+            await session.rollback()
+            discard_root(request.app, identity)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Stored word could not be removed from the trie"
+            )
+
+        try:
+            await session.commit()
+        except SQLAlchemyError:
+            await session.rollback()
+            discard_root(request.app, identity)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not delete word"
+            )
+    else:
+        result = deleteWord(ctypes.byref(root), c_word)
 
     if result == False:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"'{word}' not found")
