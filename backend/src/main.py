@@ -1,6 +1,7 @@
 import ctypes
 import re
 import io
+import asyncio
 
 from typing import Annotated
 from fastapi import status, Depends, FastAPI, Query, Request, HTTPException, UploadFile, File
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
 
     root, functions = init_trie()
     app.state.roots = {}
+    app.state.root_locks = {}
     app.state.functions = functions
 
     yield
@@ -40,6 +42,7 @@ async def lifespan(app: FastAPI):
     for root in app.state.roots.values():
         destroyTrieNode(ctypes.byref(root))
     app.state.roots.clear()
+    app.state.root_locks.clear()
 
     await engine.dispose()
 
@@ -61,6 +64,15 @@ def discard_root(app: FastAPI, identity: str):
     if root is not None:
         destroyTrieNode = app.state.functions["destroyTrieNode"]
         destroyTrieNode(ctypes.byref(root))
+
+def get_root_lock(app: FastAPI, identity: str) -> asyncio.Lock:
+    lock = app.state.root_locks.get(identity)
+
+    if lock is None:
+        lock = asyncio.Lock()
+        app.state.root_locks[identity] = lock
+
+    return lock
 
 def get_user_id(identity: Identity):
     if identity.startswith("user:"):
@@ -108,6 +120,17 @@ async def get_loaded_root(
 
     return root
 
+@asynccontextmanager
+async def locked_root(
+    request: Request,
+    identity: Identity,
+    session: DatabaseSession,
+):
+    lock = get_root_lock(request.app, identity)
+
+    async with lock:
+        yield await get_loaded_root(request, identity, session)
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.secret_key.get_secret_value(),
@@ -136,21 +159,22 @@ async def search_word(
     findWords = request.app.state.functions["findWords"]
     freeWordList = request.app.state.functions["freeWordList"]
 
-    root = await get_loaded_root(request, identity, session)
+    async with locked_root(request, identity, session) as root:
+        if not prefix:
+            prefix = ""
 
-    if not prefix:
-        prefix = ""
+        c_prefix = ctypes.create_string_buffer(prefix.encode("utf-8"))
+        word_list = findWords(root, c_prefix)
 
-    c_prefix = ctypes.create_string_buffer(prefix.encode("utf-8"))
-    word_list = findWords(root, c_prefix)
+        response = []
 
-    response = []
-    
-    for i in range(word_list.count):
-        entry = word_list.entries[i]
-        response.append(entry.decode('utf-8'))
-        
-    freeWordList(word_list)
+        try:
+            for i in range(word_list.count):
+                entry = word_list.entries[i]
+                response.append(entry.decode('utf-8'))
+        finally:
+            freeWordList(word_list)
+
     if response == []:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No matches found")
     return {"words": response}
@@ -162,63 +186,62 @@ async def insert_word(
     session: DatabaseSession,
     word: Annotated[ str, Query(max_length=100, pattern=r'^[-a-zA-Z0-9 /@"()+.,]*$') ],
 ):
-    insertTrieNode = request.app.state.functions["insertTrieNode"]
-    root = await get_loaded_root(request, identity, session)
+    async with locked_root(request, identity, session) as root:
+        insertTrieNode = request.app.state.functions["insertTrieNode"]
+        c_word = ctypes.create_string_buffer(word.encode("utf-8"))
 
-    c_word = ctypes.create_string_buffer(word.encode("utf-8"))
-
-    user_id = get_user_id(identity)
-    if user_id != -1:
-        entry = Entry(
-            user_id=user_id,
-            entry=word
-        )
-        session.add(entry)
-
-        try:
-            await session.flush()
-        except IntegrityError:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"'{word}' already exists"
+        user_id = get_user_id(identity)
+        if user_id != -1:
+            entry = Entry(
+                user_id=user_id,
+                entry=word
             )
-        except SQLAlchemyError:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not save word"
-            )
+            session.add(entry)
 
-        result = insertTrieNode(ctypes.byref(root), c_word)
-
-        if result != status.HTTP_201_CREATED:
-            await session.rollback()
-        else:
             try:
-                await session.commit()
+                await session.flush()
+            except IntegrityError:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"'{word}' already exists"
+                )
             except SQLAlchemyError:
                 await session.rollback()
-                discard_root(request.app, identity)
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Could not save word"
                 )
-    else:
-        result = insertTrieNode(ctypes.byref(root), c_word)
 
-    if result == 400:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"'{word}' is empty")
-    elif result == 409:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"'{word}' already exists")
-    elif result == 201:
-        return {"message": f"successfully inserted '{word}'"}
-    else:
-        discard_root(request.app, identity)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unexpected response from trie"
-        )
+            result = insertTrieNode(ctypes.byref(root), c_word)
+
+            if result != status.HTTP_201_CREATED:
+                await session.rollback()
+            else:
+                try:
+                    await session.commit()
+                except SQLAlchemyError:
+                    await session.rollback()
+                    discard_root(request.app, identity)
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Could not save word"
+                    )
+        else:
+            result = insertTrieNode(ctypes.byref(root), c_word)
+
+        if result == 400:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"'{word}' is empty")
+        elif result == 409:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"'{word}' already exists")
+        elif result == 201:
+            return {"message": f"successfully inserted '{word}'"}
+        else:
+            discard_root(request.app, identity)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unexpected response from trie"
+            )
     
 
 @app.post("/admin/insert_excel", include_in_schema=False)
@@ -281,59 +304,58 @@ async def delete_word(
         str, Query(max_length=100, pattern=r'^[-a-zA-Z0-9 /@"()+.,]*$')
     ],
 ):
-    deleteWord = request.app.state.functions["deleteWord"]
-    root = await get_loaded_root(request, identity, session)
+    async with locked_root(request, identity, session) as root:
+        deleteWord = request.app.state.functions["deleteWord"]
+        c_word = ctypes.create_string_buffer(word.encode("utf-8"))
 
-    c_word = ctypes.create_string_buffer(word.encode("utf-8"))
-
-    user_id = get_user_id(identity)
-    if user_id != -1:
-        result = await session.execute(
-            select(Entry).where(
-                Entry.user_id == user_id,
-                func.lower(Entry.entry) == word.lower(),
+        user_id = get_user_id(identity)
+        if user_id != -1:
+            result = await session.execute(
+                select(Entry).where(
+                    Entry.user_id == user_id,
+                    func.lower(Entry.entry) == word.lower(),
+                )
             )
-        )
-        entry = result.scalars().first()
+            entry = result.scalars().first()
 
-        if entry is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"'{word}' not found"
-            )
-        await session.delete(entry)
-        try:
-            await session.flush()
-        except SQLAlchemyError:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not delete word"
-            )
+            if entry is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"'{word}' not found"
+                )
+            await session.delete(entry)
+            try:
+                await session.flush()
+            except SQLAlchemyError:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not delete word"
+                )
 
-        result = deleteWord(ctypes.byref(root), c_word)
+            result = deleteWord(ctypes.byref(root), c_word)
 
-        if not result:
-            await session.rollback()
-            discard_root(request.app, identity)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Stored word could not be removed from the trie"
-            )
+            if not result:
+                await session.rollback()
+                discard_root(request.app, identity)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Stored word could not be removed from the trie"
+                )
 
-        try:
-            await session.commit()
-        except SQLAlchemyError:
-            await session.rollback()
-            discard_root(request.app, identity)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not delete word"
-            )
-    else:
-        result = deleteWord(ctypes.byref(root), c_word)
+            try:
+                await session.commit()
+            except SQLAlchemyError:
+                await session.rollback()
+                discard_root(request.app, identity)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not delete word"
+                )
+        else:
+            result = deleteWord(ctypes.byref(root), c_word)
 
-    if result == False:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"'{word}' not found")
-    else:
-        return {"message": f"successfully deleted '{word}'"}
+        if result == False:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"'{word}' not found")
+        else:
+            return {"message": f"successfully deleted '{word}'"}

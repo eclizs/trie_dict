@@ -23,12 +23,24 @@ async def get_user_by_email(
     )
     return result.scalars().first()
 
-async def get_identity(request: Request) -> str:
+async def get_identity(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> str:
     identity = request.session.get("identity")
 
-    if identity is None:
-        identity = f"guest:{uuid4()}"
-        request.session["identity"] = identity
+    if identity_is_valid(identity):
+        if identity.startswith("guest:"):
+            return identity
+
+        user_id = int(identity.removeprefix("user:"))
+        result = await session.execute(select(User.id).where(User.id == user_id))
+        if result.scalars().first() is not None:
+            return identity
+
+    request.session.clear()
+    identity = f"guest:{uuid4()}"
+    request.session["identity"] = identity
 
     return identity
 
