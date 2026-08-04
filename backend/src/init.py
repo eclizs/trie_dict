@@ -1,6 +1,6 @@
 import ctypes
 import os
-from .parser import *
+from parser import *
 
 path = os.path.abspath(os.path.dirname(__file__))
 
@@ -42,11 +42,11 @@ def init_pointer_type(type, pointer_level: int):
     
 
 def init_type(type: str):
-    if type in ctypes_map:
-        return ctypes_map[type]
+    pointer_level = type.count("*")
+    base_type = type.replace("*", "").strip()
+    if base_type in ctypes_map:
+        return ctypes_map[base_type]
     else:
-        pointer_level = type.count("*")
-        base_type = type.replace("*", "").strip()
         return init_pointer_type(globals()[base_type], pointer_level)
         
 def init_function(name, argtypes: list, restype):
@@ -66,6 +66,7 @@ def init_trie():
         if func_param is None:
             func_param = []
         functions[i] = (func_name, [init_type(param) for param in func_param], init_type(return_val))
+        print(functions[i])
         i += 1
 
     func_dict = {}
@@ -73,3 +74,6 @@ def init_trie():
         func_dict[func_name] = init_function(func_name, argtypes, restype)
 
     return create_trie_root(), func_dict
+
+if __name__ == "__main__":
+    init_trie()

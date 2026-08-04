@@ -17,10 +17,14 @@ def parse_header(filepath: str) -> list:
         
         i = 0
         for i, param in enumerate(func_param):
-            func_param[i] = param.split(" ")[0]
-            pointers = param.count("*")
-            if func_param[i].count("*") == 0:
-                func_param[i] += "*" * pointers
+            match = re.fullmatch(r"(.+?)([A-Za-z_]\w*)", param)
+
+            if match is None:
+                raise ValueError(f"Could not parse parameter: {param}")
+
+            param_type = match.group(1).strip()
+            param_type = re.sub(r"\s*\*\s*", "*", param_type)
+            func_param[i] = re.sub(r"\s+", " ", param_type)
 
         if return_val.split()[-1] in ("typedef", "struct", "enum"):
             continue
@@ -28,3 +32,8 @@ def parse_header(filepath: str) -> list:
         functions.append((func_name, func_param, return_val))
 
     return functions
+
+if __name__ == "__main__":
+    import os
+    path = os.path.abspath(os.path.dirname(__file__))
+    functions = parse_header(os.path.join(path, "../include/trie.h"))
