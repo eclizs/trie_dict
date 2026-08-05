@@ -12,7 +12,7 @@ from .models import Entry
 
 
 def initialize_trie_state(app: FastAPI) -> None:
-    _, functions = init_trie()
+    functions = init_trie()
     app.state.roots = {}
     app.state.root_locks = {}
     app.state.functions = functions
@@ -55,6 +55,21 @@ def get_root_lock(app: FastAPI, identity: str) -> asyncio.Lock:
         app.state.root_locks[identity] = lock
 
     return lock
+
+
+def get_trie_words(app: FastAPI, root: ctypes._Pointer) -> list[str]:
+    find_words = app.state.functions["findWords"]
+    free_word_list = app.state.functions["freeWordList"]
+    empty_prefix = ctypes.create_string_buffer(b"")
+    word_list = find_words(root, empty_prefix)
+
+    try:
+        return [
+            word_list.entries[index].decode("utf-8")
+            for index in range(word_list.count)
+        ]
+    finally:
+        free_word_list(word_list)
 
 
 async def populate_trie(

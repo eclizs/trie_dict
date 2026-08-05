@@ -80,7 +80,7 @@ def init_trie():
     for func_name, argtypes, restype in functions:
         func_dict[func_name] = init_function(func_name, argtypes, restype)
 
-    return create_trie_root(), func_dict
+    return func_dict
 
 if __name__ == "__main__":
     init_trie()

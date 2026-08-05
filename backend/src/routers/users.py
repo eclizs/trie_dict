@@ -2,12 +2,14 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..auth import hash_password, verify_password
-from ..crud import get_user_by_email
+from ..crud import create_user_with_entries, get_user_by_email
 from ..dependencies import DatabaseSession, Identity, get_current_user
 from ..models import User
 from ..schema import UserCreate, UserLogin, UserRead
+from ..trie_state import discard_root, get_trie_words, locked_root
 
 router = APIRouter()
 
@@ -32,16 +34,25 @@ async def register(
         created_at=datetime.now(UTC)
     )
 
-    session.add(user)
-
     try:
-        await session.commit()
-        await session.refresh(user)
-    except:
+        if identity.startswith("guest:"):
+            async with locked_root(request, identity, session) as guest_root:
+                guest_entries = get_trie_words(request.app, guest_root)
+                await create_user_with_entries(session, user, guest_entries)
+                discard_root(request.app, identity)
+        else:
+            await create_user_with_entries(session, user)
+    except IntegrityError:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered"
+        )
+    except SQLAlchemyError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create user"
         )
 
     request.session.clear()
