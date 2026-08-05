@@ -61,11 +61,10 @@ static void test_insert_find_and_delete(void)
     destroyTrieNode(&root);
 }
 
-static void test_duplicate_insert_updates_description(void)
+static void test_duplicate_insert(void)
 {
     TrieNode *root = NULL;
     char first_word[] = "hello";
-    char first_desc[] = "first description";
     char prefix[] = "hello";
 
     int first = insertTrieNode(&root, first_word);
@@ -76,7 +75,7 @@ static void test_duplicate_insert_updates_description(void)
 
     WordList found = findWords(root, prefix);
     expect_true(found.count == 1, "duplicate insert should not create a second entry");
-    expect_true(strcmp(found.entries[0], "hello") == 0, "word should be normalized to lowercase form");
+    expect_true(strcmp(found.entries[0], "hello") == 0, "original word should be retained");
 
     freeWordList(found);
     destroyTrieNode(&root);
@@ -86,17 +85,14 @@ static void test_invalid_and_empty_inputs(void)
 {
     TrieNode *root = NULL;
     char invalid_word[] = "bad:word";
-    char valid_desc[] = "desc";
     char empty_word[] = "";
-    char empty_desc_word[] = "word";
-    char empty_desc[] = "";
     char prefix[] = "";
 
     int invalid_insert = insertTrieNode(&root, invalid_word);
     expect_true(invalid_insert == 400, "insert should reject unsupported characters");
 
-    int empty_err = insertTrieNode(&root, empty_word);
-    expect_true(empty_err == 400, "insert should reject empty words");
+    int empty_error = insertTrieNode(&root, empty_word);
+    expect_true(empty_error == 400, "insert should reject empty words");
 
     WordList empty = findWords(root, prefix);
     expect_true(empty.count == 0, "findWords should return no entries for an empty trie");
@@ -108,7 +104,7 @@ static void test_invalid_and_empty_inputs(void)
 int main(void)
 {
     test_insert_find_and_delete();
-    test_duplicate_insert_updates_description();
+    test_duplicate_insert();
     test_invalid_and_empty_inputs();
 
     puts("All trie tests passed.");
