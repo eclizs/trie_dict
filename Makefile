@@ -8,30 +8,37 @@ TEST_CFLAGS += -DDEBUG -g
 endif
 
 SRC_DIR = backend/src
-TEST_DIR = backend/tests
+C_TEST_DIR = backend/tests/c
+PY_TEST_DIR = backend/tests/python
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
 SRCS = $(wildcard $(SRC_DIR)/*.c)
-TEST_SRCS = $(TEST_DIR)/test_trie.c $(SRC_DIR)/trie.c
+C_TEST_SRCS = $(C_TEST_DIR)/test_trie.c $(SRC_DIR)/trie.c
 
 TARGET = $(SRC_DIR)/libtrie.so
-TEST_TARGET = $(TEST_DIR)/test_trie
+C_TEST_TARGET = $(C_TEST_DIR)/test_trie
 
 # ── Default target ────────────────────────────────────────────────
 all: $(TARGET)
 
-# ── Test target ─────────────────────────────────────────────────────
-test: $(TEST_TARGET)
-	./$(TEST_TARGET)
+# ── Test targets ────────────────────────────────────────────────────
+test: test-c test-python
+
+test-c: $(C_TEST_TARGET)
+	./$(C_TEST_TARGET)
+
+test-python: $(TARGET)
+	$(PYTHON) -m unittest discover -s $(PY_TEST_DIR) -p 'test_*.py' -v
 
 # ── Link ──────────────────────────────────────────────────────────
 $(TARGET): $(SRCS)
 	$(CC) $(CFLAGS) $^ -o $@
 
-$(TEST_TARGET): $(TEST_SRCS)
+$(C_TEST_TARGET): $(C_TEST_SRCS)
 	$(CC) $(TEST_CFLAGS) $^ -o $@
 
-.PHONY: clean test
+.PHONY: clean test test-c test-python
 
 # ── Clean ─────────────────────────────────────────────────────────
 clean:
-	rm -f backend/src/libtrie.so $(TEST_TARGET)
+	rm -f backend/src/libtrie.so $(C_TEST_TARGET)

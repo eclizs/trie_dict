@@ -1,5 +1,23 @@
 ## TRIE_DICT
 
+### Tests
+
+The C and Python suites are kept separate and can be run independently:
+
+```bash
+make test-c
+make test-python
+```
+
+Run both suites with:
+
+```bash
+make test
+```
+
+Python integration tests use a fresh temporary SQLite database for each test and
+never read from or write to the development `entries.db`.
+
 ### TODO: Auth + Multi-User Persistence
 
 Design decisions from planning session, in implementation order.
