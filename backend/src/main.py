@@ -3,13 +3,15 @@ import re
 import io
 
 from typing import Annotated
-from fastapi import status, FastAPI, Query, Request, HTTPException, UploadFile, File
+from fastapi import Form, status, FastAPI, Query, Request, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 from contextlib import asynccontextmanager
+
+from .crud import parse_admin_csv, parse_user_csv
 
 from .models import Entry, User
 
@@ -54,6 +56,14 @@ app.include_router(router, prefix="/users", tags=["users"])
 async def root():
     return FileResponse("frontend/index.html")
 
+@app.get("/login", include_in_schema=False)
+async def login_page():
+    return FileResponse("frontend/login.html")
+
+@app.get("/register", include_in_schema=False)
+async def register_page():
+    return FileResponse("frontend/register.html")
+
 @app.get("/search")
 async def search_word(
     request: Request,
@@ -93,10 +103,10 @@ async def insert_word(
     session: DatabaseSession,
     word: Annotated[ str, Query(max_length=100, pattern=r'^[-a-zA-Z0-9 /@"()+.,]*$') ],
 ):
-    async with locked_root(request, identity, session) as root:
-        insertTrieNode = request.app.state.functions["insertTrieNode"]
-        c_word = ctypes.create_string_buffer(word.encode("utf-8"))
+    insertTrieNode = request.app.state.functions["insertTrieNode"]
+    c_word = ctypes.create_string_buffer(word.encode("utf-8"))
 
+    async with locked_root(request, identity, session) as root:
         user_id = get_user_id(identity)
         if user_id != -1:
             entry = Entry(
@@ -149,56 +159,45 @@ async def insert_word(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Unexpected response from trie"
             )
-    
 
 @app.post("/insert_excel", include_in_schema=False)
 async def insert_excel(
     request: Request,
     identity: Identity,
     session: DatabaseSession,
-    file: UploadFile = File(...)
+    column: Annotated[str | None, Form()] = None,
+    file: UploadFile = File(...),
 ):
+    if not column:
+        column = ""
+
+    user = None
+
     user_id = get_user_id(identity)
-    if user_id == -1:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Method not allowed"
-        )
-    
-    result = await session.execute(select(User).where(User.id == get_user_id(identity)))
-    user = result.scalars().first()
+    if user_id != -1:
+        result = await session.execute(select(User).where(User.id == get_user_id(identity)))
+        user = result.scalars().first()
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User doesn't exists"
-        )
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User doesn't exists"
+            )
 
-    if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Method not allowed"
-        )
-    
     contents = await file.read()
-    df = read_csv(io.BytesIO(contents), header=None)
 
-    fields = ['location', 'code', 'name', 'quantity', 'quantifier', 'total']
-
-    df = df.set_axis(fields, axis=1)
-
-    names = list(df['name'])
-
-    names = [name.strip('"') if name.startswith('"') or name.endswith('"') else name
-            for name in names]
+    if user is None or not user.is_admin:
+        entries = parse_user_csv(contents, column)
+    elif user.is_admin:
+        entries = parse_admin_csv(contents)
 
     results = {"inserted": [], "failed": []}
-    for name in names:
+    for entry in entries:
         try:
-            await insert_word(request, identity, session, name)
-            results["inserted"].append(name)
+            await insert_word(request, identity, session, entry)
+            results["inserted"].append(entry)
         except HTTPException as e:
-            results["failed"].append({"word": name, "reason": e.detail})
+            results["failed"].append({"word": entry, "reason": e.detail})
 
     return results
 
@@ -211,10 +210,10 @@ async def delete_word(
         str, Query(max_length=100, pattern=r'^[-a-zA-Z0-9 /@"()+.,]*$')
     ],
 ):
-    async with locked_root(request, identity, session) as root:
-        deleteWord = request.app.state.functions["deleteWord"]
-        c_word = ctypes.create_string_buffer(word.encode("utf-8"))
+    deleteWord = request.app.state.functions["deleteWord"]
+    c_word = ctypes.create_string_buffer(word.encode("utf-8"))
 
+    async with locked_root(request, identity, session) as root:
         user_id = get_user_id(identity)
         if user_id != -1:
             result = await session.execute(
@@ -263,6 +262,54 @@ async def delete_word(
             result = deleteWord(ctypes.byref(root), c_word)
 
         if result == False:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"'{word}' not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"'{word}' not found"
+            )
         else:
             return {"message": f"successfully deleted '{word}'"}
+
+
+@app.delete("/delete_all")
+async def delete_all(
+    request: Request,
+    identity: Identity,
+    session: DatabaseSession,
+):
+    destroy_trie_node = request.app.state.functions["destroyTrieNode"]
+
+    async with locked_root(request, identity, session) as root:
+        user_id = get_user_id(identity)
+        if user_id != -1:
+            results = await session.execute(
+                select(Entry).where(Entry.user_id == user_id)
+            )
+            entries = results.scalars().all()
+
+            for entry in entries:
+                await session.delete(entry)
+
+            try:
+                await session.flush()
+            except SQLAlchemyError:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not delete word from the database"
+                )
+
+            destroy_trie_node(ctypes.byref(root))
+
+            try:
+                await session.commit()
+            except SQLAlchemyError:
+                await session.rollback()
+                discard_root(request.app, identity)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Could not delete all words"
+                )
+        else:
+            destroy_trie_node(ctypes.byref(root))
+
+    return {"message": "Deleted all entries"}
