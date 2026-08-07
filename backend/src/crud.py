@@ -1,9 +1,20 @@
 from collections.abc import Iterable
+import io
+import re
 
+from pandas import read_csv
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Entry, User
+
+
+_MALFORMED_TRAILING_QUOTED_TOKEN = re.compile(r"(?<!\S)(\S+)\"\"$")
+
+
+def _normalize_csv_entry(value: object) -> str:
+    entry = str(value)
+    return _MALFORMED_TRAILING_QUOTED_TOKEN.sub(r'"\1"', entry)
 
 
 async def get_user_by_email(
@@ -39,3 +50,17 @@ async def create_user_with_entries(
 
     await session.commit()
     return user
+
+def parse_user_csv(contents: bytes, column: str | None) -> list[str]:
+    df = read_csv(io.BytesIO(contents))
+    if not column:
+        values = df.iloc[:, 0]
+    else:
+        values = df[column]
+
+    return [_normalize_csv_entry(value) for value in values]
+
+def parse_admin_csv(contents: bytes) -> list[str]:
+    df = read_csv(io.BytesIO(contents), header=None)
+
+    return [_normalize_csv_entry(value) for value in df[df.columns[2]]]
