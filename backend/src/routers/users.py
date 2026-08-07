@@ -1,3 +1,4 @@
+import ctypes
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -84,9 +85,14 @@ async def read_current_user(current_user: Annotated[User, Depends(get_current_us
     return current_user
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(request: Request) -> Response:
+async def logout(request: Request, session: DatabaseSession) -> Response:
     identity = request.session.get("identity")
 
+    destroyTrieNode = request.app.state.functions["destroyTrieNode"]
+
+    async with locked_root(request, identity, session) as root:# type: ignore
+        destroyTrieNode(ctypes.byref(root))
+        
     request.session.clear()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
