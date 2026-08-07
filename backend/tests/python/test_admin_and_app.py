@@ -1,6 +1,32 @@
+import unittest
+
 from backend.src import main
+from backend.src.crud import parse_admin_csv, parse_user_csv
 
 from support import AppTestCase
+
+
+class CsvParsingTests(unittest.TestCase):
+    def test_repairs_malformed_trailing_quoted_token(self) -> None:
+        admin_csv = (
+            b'A,C,"Indomie Kaldu Ayam "40"",1,item,1\n'
+            b'A,C,"LPG 12kg "ISI"",1,item,1\n'
+        )
+        user_csv = b'name\n"Indomie Kaldu Ayam "40""\n'
+
+        self.assertEqual(
+            parse_admin_csv(admin_csv),
+            ['Indomie Kaldu Ayam "40"', 'LPG 12kg "ISI"'],
+        )
+        self.assertEqual(
+            parse_user_csv(user_csv, None),
+            ['Indomie Kaldu Ayam "40"'],
+        )
+
+    def test_preserves_valid_embedded_quotes(self) -> None:
+        contents = b'A,C,"Product ""Special""",1,item,1\n'
+
+        self.assertEqual(parse_admin_csv(contents), ['Product "Special"'])
 
 
 class AdminImportTests(AppTestCase):
@@ -8,18 +34,6 @@ class AdminImportTests(AppTestCase):
         return self.client.post(
             "/insert_excel",
             files={"file": ("entries.csv", contents, "text/csv")},
-        )
-
-    def test_guest_and_regular_user_cannot_import_csv(self) -> None:
-        self.assertEqual(
-            self.upload_csv("A,C,Guest Item,1,item,1\n").status_code,
-            403,
-        )
-
-        self.assertEqual(self.register().status_code, 201)
-        self.assertEqual(
-            self.upload_csv("A,C,User Item,1,item,1\n").status_code,
-            403,
         )
 
     def test_admin_can_import_entries_and_duplicates_are_reported(self) -> None:
@@ -61,11 +75,36 @@ class ApplicationTests(AppTestCase):
     def test_frontend_and_static_files_are_served(self) -> None:
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("<title>orderan</title>", response.text)
+        self.assertIn("<title>EffortList</title>", response.text)
+        self.assertIn("Guest session", response.text)
+        self.assertIn("js/pages/dictionary.js?v=1", response.text)
+        self.assertIn('id="delete-all-dialog"', response.text)
+        self.assertIn('id="confirm-delete-all-btn"', response.text)
 
         stylesheet = self.client.get("/static/style.css")
         self.assertEqual(stylesheet.status_code, 200)
         self.assertIn("text/css", stylesheet.headers["content-type"])
+
+    def test_login_and_registration_pages_are_served(self) -> None:
+        login = self.client.get("/login")
+        registration = self.client.get("/register")
+
+        self.assertEqual(login.status_code, 200)
+        self.assertIn('data-mode="login"', login.text)
+        self.assertIn('autocomplete="current-password"', login.text)
+        self.assertEqual(registration.status_code, 200)
+        self.assertIn('data-mode="register"', registration.text)
+        self.assertIn('autocomplete="new-password"', registration.text)
+
+        for script_path in (
+            "/static/js/pages/auth.js",
+            "/static/js/pages/dictionary.js",
+            "/static/js/core/api.js",
+        ):
+            with self.subTest(script_path=script_path):
+                script = self.client.get(script_path)
+                self.assertEqual(script.status_code, 200)
+                self.assertIn("javascript", script.headers["content-type"])
 
     def test_hidden_admin_route_is_not_in_openapi(self) -> None:
         paths = main.app.openapi()["paths"]

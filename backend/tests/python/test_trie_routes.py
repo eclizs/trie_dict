@@ -76,6 +76,19 @@ class GuestTrieRouteTests(AppTestCase):
         self.assertEqual(len(guest_identities), 2)
         self.assertIn(first_identity, guest_identities)
 
+    def test_delete_all_clears_guest_trie(self) -> None:
+        for word in ("First", "Second"):
+            self.assertEqual(
+                self.client.post("/insert", params={"word": word}).status_code,
+                200,
+            )
+
+        response = self.client.delete("/delete_all")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {"message": "Deleted all entries"})
+        self.assertEqual(self.client.get("/search").status_code, 404)
+
 
 class AuthenticatedTrieRouteTests(AppTestCase):
     def test_entries_rebuild_from_database_after_root_is_discarded(self) -> None:
@@ -111,6 +124,23 @@ class AuthenticatedTrieRouteTests(AppTestCase):
             self.database_rows("SELECT entry FROM dict_entries"),
             [],
         )
+
+    def test_delete_all_commits_database_deletions(self) -> None:
+        self.assertEqual(self.register().status_code, 201)
+        for word in ("Persistent First", "Persistent Second"):
+            self.assertEqual(
+                self.client.post("/insert", params={"word": word}).status_code,
+                200,
+            )
+
+        response = self.client.delete("/delete_all")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.database_rows("SELECT entry FROM dict_entries"), [])
+
+        identity = self.identity_with_prefix("user:")
+        discard_root(main.app, identity)
+        self.assertEqual(self.client.get("/search").status_code, 404)
 
 
 class TrieStateTests(unittest.TestCase):
