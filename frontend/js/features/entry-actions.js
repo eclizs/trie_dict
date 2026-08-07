@@ -31,6 +31,7 @@ export function initEntryActions() {
   const confirmDeleteAllButton = document.getElementById("confirm-delete-all-btn");
   const cancelDeleteAllButton = document.getElementById("cancel-delete-all-btn");
   const dialogStatus = document.getElementById("delete-all-dialog-status");
+  const resultsList = document.getElementById("results-list-delete");
 
   let debounceTimer;
   let highlightedIndex = -1;
@@ -218,7 +219,7 @@ export function initEntryActions() {
 
   document.addEventListener("click", (event) => {
     if (!searchBox?.contains(event.target)) {
-      closeDropdown(searchInput, resultsList);
+      closeDropdown(deleteInput, resultsList);
     }
   });
 }
