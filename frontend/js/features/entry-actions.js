@@ -215,4 +215,10 @@ export function initEntryActions() {
 
   confirmDeleteAllButton?.addEventListener("click", performDeleteAll);
   cancelDeleteAllButton?.addEventListener("click", () => confirmationDialog?.close());
+
+  document.addEventListener("click", (event) => {
+    if (!searchBox?.contains(event.target)) {
+      closeDropdown(searchInput, resultsList);
+    }
+  });
 }

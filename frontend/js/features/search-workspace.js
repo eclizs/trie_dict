@@ -14,9 +14,9 @@ export function initSearchWorkspace() {
   const headerInput = document.getElementById("header-input");
   const resultsList = document.getElementById("results-list-search");
   const searchBox = document.querySelector(".search-box");
-  const clearButton = document.getElementById("clearBtn");
-  const copyButton = document.getElementById("copyBtn");
-  const saveButton = document.getElementById("saveBtn");
+  const clearButton = document.getElementById("clear-btn");
+  const copyButton = document.getElementById("copy-btn");
+  const saveButton = document.getElementById("save-btn");
   const headerButton = document.getElementById("headerBtn");
   const savedList = document.getElementById("saved-list");
   const headerText = document.getElementById("header-text");
