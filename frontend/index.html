@@ -3,29 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>orderan</title>
+<title>EffortList</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
   <main class="app">
 
+    <div class="account-bar" aria-label="Account">
+      <span class="account-state" id="account-state">
+        <span class="account-dot" aria-hidden="true"></span>
+        <span id="account-label">Guest session</span>
+      </span>
+      <div class="account-actions">
+        <a class="account-link" id="login-link" href="/login">Log in</a>
+        <a class="account-link is-primary" id="register-link" href="/register">Register</a>
+        <button class="account-link" id="logout-btn" type="button" hidden>Log out</button>
+      </div>
+    </div>
+
     <!-- Mode switcher -->
     <nav class="mode-switch" role="tablist" aria-label="Choose action">
-      <button class="mode-btn is-active" data-mode="search" role="tab" aria-selected="true">Cari</button>
-      <button class="mode-btn" data-mode="add" role="tab" aria-selected="false">Tambahkan Kata</button>
-      <button class="mode-btn" data-mode="delete" role="tab" aria-selected="false">Hapus Kata</button>
+      <button class="mode-btn is-active" data-mode="search" role="tab" aria-selected="true">Search</button>
+      <button class="mode-btn" data-mode="add" role="tab" aria-selected="false">Add</button>
+      <button class="mode-btn" data-mode="delete" role="tab" aria-selected="false">Delete</button>
     </nav>
 
     <!-- SEARCH PANEL -->
     <section class="panel is-active" id="panel-search" role="tabpanel">
-      <label class="field-label" for="search-input">Cari Kata</label>
+      <label class="field-label" for="search-input">Search</label>
       <div class="search-box">
         <div class="search-controls">
           <input 
             id="number-input"
             class="text-input"
-            type="number"
+            type="text"
             autocomplete="off"
             maxlength="4"
             inputmode="numeric"
@@ -76,7 +88,7 @@
 
     <!-- ADD PANEL -->
     <section class="panel" id="panel-add" role="tabpanel">
-      <label class="field-label" for="add-input">Tambah kata</label>
+      <label class="field-label" for="add-input">Add Word</label>
       <input
         id="add-input"
         class="text-input"
@@ -85,20 +97,29 @@
         autocomplete="off"
         maxlength="100"
       >
-      <button class="action-btn" id="add-btn">Tambahkan</button>
+      <button class="action-btn" id="add-btn">Add</button>
         <div>
+          <label class="field-label" for="file">Upload a .csv file</label>
           <input type="file" id="file" name="file" accept=".csv" />
+          <button id="upload-btn" class="btn-secondary" type="button">Submit</button>
         </div>
-        <div>
-          <button id="uploadBtn" class="btn-secondary" type="button">Submit</button>
           <pre class="status-msg" id="upload-status" role="status"></pre>
+        <div>
+            <label class="field-label" for="csv-header-input">Column to parse</label>
+            <input
+              id="csv-header-input"
+              class="text-input"
+              type="text"
+              autocomplete="off"
+              maxlength="20"
+            >
         </div>
       <p class="status-msg" id="add-status" role="status"></p>
     </section>
 
     <!-- DELETE PANEL -->
     <section class="panel" id="panel-delete" role="tabpanel">
-      <label class="field-label" for="delete-input">Hapus kata</label>
+      <label class="field-label" for="delete-input">Delete Word</label>
       <div class="delete-box">
         <input
           id="delete-input"
@@ -110,12 +131,26 @@
         >
         <ul class="entry-list" id="results-list-delete" role="listbox" aria-live="polite"></ul>
       </div>
-      <button class="action-btn danger" id="delete-btn">Hapus</button>
+      <button class="action-btn danger" id="delete-btn">Delete</button>
+      <button class="btn-secondary delete-all-trigger" id="delete-all-btn" type="button">Delete all entries</button>
       <p class="status-msg" id="delete-status" role="status"></p>
     </section>
 
   </main>
 
-  <script type="module" src="/static/app.js"></script>
+  <dialog class="confirm-dialog" id="delete-all-dialog" aria-labelledby="delete-all-title" aria-describedby="delete-all-description">
+    <div class="confirm-dialog-icon" aria-hidden="true">!</div>
+    <h2 id="delete-all-title">Delete every entry?</h2>
+    <p id="delete-all-description">
+      This permanently clears your entire dictionary. This action cannot be undone.
+    </p>
+    <p class="status-msg confirm-dialog-status" id="delete-all-dialog-status" role="status" aria-live="polite"></p>
+    <div class="confirm-dialog-actions">
+      <button class="btn-secondary" id="cancel-delete-all-btn" type="button">Cancel</button>
+      <button class="action-btn danger" id="confirm-delete-all-btn" type="button">Delete everything</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="/static/js/pages/dictionary.js?v=1"></script>
 </body>
 </html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EffortList</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="auth-page">
+
+  <main class="auth-shell">
+    <a class="auth-back" href="/" aria-label="Return to dictionary">← Back to dictionary</a>
+
+    <section class="auth-card" aria-labelledby="auth-title">
+      <p class="auth-eyebrow">Your dictionary</p>
+      <h1 id="auth-title">Welcome back</h1>
+      <p class="auth-intro">Log in to continue with your saved words.</p>
+
+      <form class="auth-form" id="auth-form" data-mode="login" novalidate>
+        <div class="auth-field">
+          <label for="email">Email</label>
+          <input
+            class="text-input"
+            id="email"
+            name="email"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            maxlength="100"
+            placeholder="you@example.com"
+            required
+            autofocus
+          >
+        </div>
+
+        <div class="auth-field">
+          <label for="password">Password</label>
+          <div class="password-field">
+            <input
+              class="text-input"
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              maxlength="100"
+              placeholder="Enter your password"
+              required
+            >
+            <button class="password-toggle" type="button" aria-label="Show password">Show</button>
+          </div>
+        </div>
+
+        <button class="action-btn auth-submit" type="submit">Log in</button>
+        <p class="status-msg auth-status" id="auth-status" role="status" aria-live="polite"></p>
+      </form>
+
+      <p class="auth-switch">New here? <a href="/register">Create an account</a></p>
+    </section>
+  </main>
+
+  <script type="module" src="/static/js/pages/auth.js?v=1"></script>
+</body>
+</html>
