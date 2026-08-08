@@ -8,6 +8,7 @@ test_trie
 obj/
 
 .env
+scripts/
 
 # Test files
 *.db
