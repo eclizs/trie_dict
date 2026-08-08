@@ -89,7 +89,7 @@ static void test_invalid_and_empty_inputs(void)
     char prefix[] = "";
 
     int invalid_insert = insertTrieNode(&root, invalid_word);
-    expect_true(invalid_insert == 400, "insert should reject unsupported characters");
+    expect_true(invalid_insert == 422, "insert should reject unsupported characters");
 
     int empty_error = insertTrieNode(&root, empty_word);
     expect_true(empty_error == 400, "insert should reject empty words");

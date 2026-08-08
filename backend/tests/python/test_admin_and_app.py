@@ -32,8 +32,30 @@ class CsvParsingTests(unittest.TestCase):
 class AdminImportTests(AppTestCase):
     def upload_csv(self, contents: str):
         return self.client.post(
-            "/insert_excel",
+            "/insert_csv",
             files={"file": ("entries.csv", contents, "text/csv")},
+        )
+
+    def test_preview_parses_entries_without_inserting_them(self) -> None:
+        response = self.client.post(
+            "/insert_csv/preview",
+            files={
+                "file": (
+                    "entries.csv",
+                    "name\nPreview Apple\nPreview Banana\n",
+                    "text/csv",
+                )
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(
+            response.json(),
+            {"entries": ["Preview Apple", "Preview Banana"]},
+        )
+        self.assertEqual(
+            self.client.get("/search", params={"prefix": "Preview"}).status_code,
+            404,
         )
 
     def test_admin_can_import_entries_and_duplicates_are_reported(self) -> None:
@@ -76,8 +98,17 @@ class ApplicationTests(AppTestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("<title>EffortList</title>", response.text)
+        self.assertIn('class="site-navbar"', response.text)
+        self.assertIn('class="site-brand"', response.text)
+        self.assertIn('class="feature-guide"', response.text)
+        self.assertIn('id="guide-search-title"', response.text)
+        self.assertIn('id="guide-add-title"', response.text)
+        self.assertIn('id="guide-delete-title"', response.text)
+        self.assertIn('data-guide-mode="search"', response.text)
         self.assertIn("Guest session", response.text)
-        self.assertIn("js/pages/dictionary.js?v=1", response.text)
+        self.assertIn("js/pages/dictionary.js?v=3", response.text)
+        self.assertIn('id="csv-preview-dialog"', response.text)
+        self.assertIn('id="confirm-upload-btn"', response.text)
         self.assertIn('id="delete-all-dialog"', response.text)
         self.assertIn('id="confirm-delete-all-btn"', response.text)
 
@@ -108,7 +139,8 @@ class ApplicationTests(AppTestCase):
 
     def test_hidden_admin_route_is_not_in_openapi(self) -> None:
         paths = main.app.openapi()["paths"]
-        self.assertNotIn("/insert_excel", paths)
+        self.assertNotIn("/insert_csv", paths)
+        self.assertNotIn("/insert_csv/preview", paths)
 
 
 if __name__ == "__main__":

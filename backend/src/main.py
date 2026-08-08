@@ -148,29 +148,58 @@ async def insert_word(
             result = insertTrieNode(ctypes.byref(root), c_word)
 
         if result == 400:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"'{word}' is empty")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty input")
         elif result == 409:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"'{word}' already exists")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This word already exists")
+        elif result == 422:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="This word has invalid characters")
         elif result == 201:
             return {"message": f"successfully inserted '{word}'"}
         else:
             discard_root(request.app, identity)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Unexpected response from trie"
+                detail="Unexpected response from server"
             )
 
-@app.post("/insert_excel", include_in_schema=False)
-async def insert_excel(
+@app.post("/insert_csv/preview", include_in_schema=False)
+async def csv_preview(
     request: Request,
     identity: Identity,
     session: DatabaseSession,
     column: Annotated[str | None, Form()] = None,
     file: UploadFile = File(...),
 ):
-    if not column:
-        column = ""
+    user = None
 
+    user_id = get_user_id(identity)
+    if user_id != -1:
+        result = await session.execute(select(User).where(User.id == get_user_id(identity)))
+        user = result.scalars().first()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User doesn't exists"
+            )
+
+    contents = await file.read()
+
+    if user is None or not user.is_admin:
+        entries = parse_user_csv(contents, column)
+    elif user.is_admin:
+        entries = parse_admin_csv(contents)
+
+    return {"entries": entries}
+
+@app.post("/insert_csv", include_in_schema=False)
+async def insert_csv(
+    request: Request,
+    identity: Identity,
+    session: DatabaseSession,
+    column: Annotated[str | None, Form()] = None,
+    file: UploadFile = File(...),
+):
     user = None
 
     user_id = get_user_id(identity)
