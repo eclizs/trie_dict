@@ -2,6 +2,7 @@ import {
   deleteAllEntries,
   deleteEntry,
   insertEntry,
+  previewEntries,
   searchEntries,
   uploadEntries,
 } from "../core/api.js";
@@ -22,6 +23,12 @@ export function initEntryActions() {
   const uploadButton = document.getElementById("upload-btn");
   const addStatus = document.getElementById("add-status");
   const uploadStatus = document.getElementById("upload-status");
+  const previewDialog = document.getElementById("csv-preview-dialog");
+  const previewCount = document.getElementById("csv-preview-count");
+  const previewList = document.getElementById("csv-preview-list");
+  const previewStatus = document.getElementById("csv-preview-status");
+  const confirmUploadButton = document.getElementById("confirm-upload-btn");
+  const cancelUploadButton = document.getElementById("cancel-upload-btn");
   const deleteInput = document.getElementById("delete-input");
   const deleteButton = document.getElementById("delete-btn");
   const deleteAllButton = document.getElementById("delete-all-btn");
@@ -36,13 +43,74 @@ export function initEntryActions() {
 
   let debounceTimer;
   let highlightedIndex = -1;
+  let pendingUpload = null;
+  let uploadInProgress = false;
 
   const deleteAllErrorMessage = (error) => {
-    if (error.status === 404) {
-      return "The delete-all endpoint is unavailable. Restart the server and try again.";
-    }
-
     return formatError(error.detail, "Could not delete all entries.");
+  };
+
+  const performUpload = async () => {
+    if (!pendingUpload) return;
+
+    const { file, column } = pendingUpload;
+    uploadInProgress = true;
+    if (confirmUploadButton) confirmUploadButton.disabled = true;
+    if (cancelUploadButton) cancelUploadButton.disabled = true;
+    setStatus(previewStatus, "Importing entries…");
+
+    try {
+      const data = await uploadEntries(file, column);
+      const insertedCount = data.inserted?.length || 0;
+      const failures = Array.isArray(data.failed) ? data.failed : [];
+      const failureDetails = failures
+          .map((item) => `${item.word}: ${item.reason}`)
+          .join("\n");
+      const summary = `${insertedCount} inserted, ${failures.length} failed.`;
+
+      if(failures.length < 50) {
+        setStatus(
+          uploadStatus,
+          failureDetails ? `${summary}\n${failureDetails}` : summary,
+          failures.length ? "err" : "ok"
+        );
+      }
+      else {
+        const failureDetailsTruncated = failures.slice(0,51)
+                                    .map((item) => `${item.word}: ${item.reason}`)
+                                    .join("\n");
+        setStatus(
+          uploadStatus,
+          failureDetailsTruncated ? `${summary}\n${failureDetailsTruncated}\nand ${failures.length - 50} more...` : summary,
+          failures.length ? "err" : "ok"
+        );
+      }
+      previewDialog?.close();
+      pendingUpload = null;
+    } catch (error) {
+      setStatus(
+        previewStatus,
+        formatError(error.detail, "Could not import the file."),
+        "err"
+      );
+    } finally {
+      uploadInProgress = false;
+      if (confirmUploadButton) confirmUploadButton.disabled = false;
+      if (cancelUploadButton) cancelUploadButton.disabled = false;
+    }
+  };
+
+  const renderCsvPreview = (entries) => {
+    if (previewCount) previewCount.textContent = String(entries.length);
+    if (!previewList) return;
+
+    const items = document.createDocumentFragment();
+    for (const entry of entries) {
+      const item = document.createElement("li");
+      item.textContent = String(entry);
+      items.append(item);
+    }
+    previewList.replaceChildren(items);
   };
 
   uploadButton?.addEventListener("click", async () => {
@@ -51,35 +119,51 @@ export function initEntryActions() {
       return;
     }
 
+    const file = fileInput.files[0];
+    const column = columnInput?.value.trim() || "";
     uploadButton.disabled = true;
-    setStatus(uploadStatus, "Importing entries…");
+    setStatus(uploadStatus, "Parsing preview…");
 
     try {
-      const data = await uploadEntries(
-        fileInput.files[0],
-        columnInput?.value.trim() || ""
-      );
-      const insertedCount = data.inserted?.length || 0;
-      const failures = Array.isArray(data.failed) ? data.failed : [];
-      const failureDetails = failures
-        .map((item) => `${item.word}: ${item.reason}`)
-        .join("\n");
-      const summary = `${insertedCount} inserted, ${failures.length} failed.`;
+      const data = await previewEntries(file, column);
+      const entries = Array.isArray(data.entries) ? data.entries : [];
 
-      setStatus(
-        uploadStatus,
-        failureDetails ? `${summary}\n${failureDetails}` : summary,
-        failures.length ? "err" : "ok"
-      );
+      pendingUpload = { file, column };
+      renderCsvPreview(entries);
+      setStatus(previewStatus, "");
+      setStatus(uploadStatus, "");
+      if (confirmUploadButton) confirmUploadButton.disabled = entries.length === 0;
+
+      if (typeof previewDialog?.showModal === "function") {
+        previewDialog.showModal();
+      } else if (window.confirm(`Insert ${entries.length} entries?`)) {
+        await performUpload();
+      } else {
+        pendingUpload = null;
+      }
     } catch (error) {
+      pendingUpload = null;
       setStatus(
         uploadStatus,
-        formatError(error.detail, "Could not import the file."),
+        formatError(error.detail, "Could not parse the file."),
         "err"
       );
     } finally {
       uploadButton.disabled = false;
     }
+  });
+
+  confirmUploadButton?.addEventListener("click", performUpload);
+  cancelUploadButton?.addEventListener("click", () => {
+    pendingUpload = null;
+    previewDialog?.close();
+  });
+  previewDialog?.addEventListener("cancel", (event) => {
+    if (uploadInProgress) {
+      event.preventDefault();
+      return;
+    }
+    pendingUpload = null;
   });
 
   addButton?.addEventListener("click", async () => {

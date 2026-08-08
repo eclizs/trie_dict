@@ -8,19 +8,63 @@
 </head>
 <body>
 
-  <main class="app">
-
-    <div class="account-bar" aria-label="Account">
-      <span class="account-state" id="account-state">
-        <span class="account-dot" aria-hidden="true"></span>
-        <span id="account-label">Guest session</span>
-      </span>
-      <div class="account-actions">
-        <a class="account-link" id="login-link" href="/login">Log in</a>
-        <a class="account-link is-primary" id="register-link" href="/register">Register</a>
-        <button class="account-link" id="logout-btn" type="button" hidden>Log out</button>
+  <div class="workspace-layout">
+    <aside class="feature-guide" aria-labelledby="feature-guide-title">
+      <div class="feature-guide-heading">
+        <p class="feature-guide-eyebrow">How it works</p>
       </div>
-    </div>
+
+      <section class="feature-guide-section is-active" data-guide-mode="search" aria-labelledby="guide-search-title">
+        <h3 id="guide-search-title"><span aria-hidden="true">01</span> Search</h3>
+        <ul>
+          <li>Type a prefix to find matching entries.</li>
+          <li>Tap a result, or use the arrow keys and Enter, to add it to your list.</li>
+          <li>Press Enter without selecting a result from the dropdown to add it immediately to your list unchanged.</li>
+          <li>The counter beside the search bar adds an optional quantity before the selected item.</li>
+          <li>Press Space or Enter in the counter to move to Search. Press Backspace in an empty Search field to move back to the counter.</li>
+          <li>Edit the saved list, add a header, clear it, copy it, or download it as a file.</li>
+        </ul>
+      </section>
+
+      <section class="feature-guide-section" data-guide-mode="add" aria-labelledby="guide-add-title" hidden>
+        <h3 id="guide-add-title"><span aria-hidden="true">02</span> Add</h3>
+        <ul>
+          <li>Add one entry directly to your searchable dictionary.</li>
+          <li>Import many entries from a CSV file.</li>
+          <li>Optionally name the CSV column to parse; otherwise the first column is used.</li>
+          <li>Review every parsed entry in the preview before confirming the import.</li>
+        </ul>
+      </section>
+
+      <section class="feature-guide-section" data-guide-mode="delete" aria-labelledby="guide-delete-title" hidden>
+        <h3 id="guide-delete-title"><span aria-hidden="true">03</span> Delete</h3>
+        <ul>
+          <li>Search your existing entries and delete a single match.</li>
+          <li>Clear the entire dictionary with the delete-all confirmation.</li>
+        </ul>
+      </section>
+    </aside>
+
+    <main class="app">
+
+    <nav class="site-navbar" aria-label="Primary navigation">
+      <a class="site-brand" href="/" aria-label="EffortList home">
+        <span class="site-brand-mark" aria-hidden="true">E</span>
+        <span>Effort<span class="site-brand-accent">List</span></span>
+      </a>
+
+      <div class="account-bar" aria-label="Account">
+        <span class="account-state" id="account-state">
+          <span class="account-dot" aria-hidden="true"></span>
+          <span id="account-label">Guest session</span>
+        </span>
+        <div class="account-actions">
+          <a class="account-link" id="login-link" href="/login">Log in</a>
+          <a class="account-link is-primary" id="register-link" href="/register">Register</a>
+          <button class="account-link" id="logout-btn" type="button" hidden>Log out</button>
+        </div>
+      </div>
+    </nav>
 
     <!-- Mode switcher -->
     <nav class="mode-switch" role="tablist" aria-label="Choose action">
@@ -38,6 +82,8 @@
             id="number-input"
             class="text-input"
             type="text"
+            aria-label="Quantity"
+            placeholder="Qty"
             autocomplete="off"
             maxlength="4"
             inputmode="numeric"
@@ -101,7 +147,7 @@
         <div>
           <label class="field-label" for="file">Upload a .csv file</label>
           <input type="file" id="file" name="file" accept=".csv" />
-          <button id="upload-btn" class="btn-secondary" type="button">Submit</button>
+          <button id="upload-btn" class="btn-secondary" type="button">Preview import</button>
         </div>
           <pre class="status-msg" id="upload-status" role="status"></pre>
         <div>
@@ -136,7 +182,21 @@
       <p class="status-msg" id="delete-status" role="status"></p>
     </section>
 
-  </main>
+    </main>
+  </div>
+
+  <dialog class="confirm-dialog csv-preview-dialog" id="csv-preview-dialog" aria-labelledby="csv-preview-title" aria-describedby="csv-preview-description">
+    <h2 id="csv-preview-title">Preview CSV import</h2>
+    <p id="csv-preview-description">
+      The parser found <strong id="csv-preview-count">0</strong> entries. Review them before inserting.
+    </p>
+    <ol class="csv-preview-list" id="csv-preview-list" aria-label="Entries to insert"></ol>
+    <p class="status-msg confirm-dialog-status" id="csv-preview-status" role="status" aria-live="polite"></p>
+    <div class="confirm-dialog-actions">
+      <button class="btn-secondary" id="cancel-upload-btn" type="button">Cancel</button>
+      <button class="action-btn" id="confirm-upload-btn" type="button">Insert entries</button>
+    </div>
+  </dialog>
 
   <dialog class="confirm-dialog" id="delete-all-dialog" aria-labelledby="delete-all-title" aria-describedby="delete-all-description">
     <div class="confirm-dialog-icon" aria-hidden="true">!</div>
@@ -151,6 +211,6 @@
     </div>
   </dialog>
 
-  <script type="module" src="/static/js/pages/dictionary.js?v=1"></script>
+  <script type="module" src="/static/js/pages/dictionary.js?v=3"></script>
 </body>
 </html>

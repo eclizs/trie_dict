@@ -74,13 +74,24 @@ export function deleteAllEntries() {
   return request("/delete_all", { method: "DELETE" });
 }
 
-export function uploadEntries(file, column = "") {
+function csvFormData(file, column = "") {
   const formData = new FormData();
   formData.append("file", file);
   if (column) formData.append("column", column);
 
-  return request("/insert_excel", {
+  return formData;
+}
+
+export function previewEntries(file, column = "") {
+  return request("/insert_csv/preview", {
     method: "POST",
-    body: formData,
+    body: csvFormData(file, column),
+  });
+}
+
+export function uploadEntries(file, column = "") {
+  return request("/insert_csv", {
+    method: "POST",
+    body: csvFormData(file, column),
   });
 }
